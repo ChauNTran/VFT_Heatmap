@@ -36,10 +36,6 @@ public class LogAnalyzer : MonoBehaviour
     public List<string> resultHeader;
     private Dictionary<Tuple<int, int>, StimulusLocation> locations;
 
-    private int fnTotal = 0;
-    private int fnMissed = 0;
-    private int fnCandidates = 0;
-
     private int FPs = 0;
     private int trials = 0;
     private int fix_checks = 0;
@@ -60,12 +56,13 @@ public class LogAnalyzer : MonoBehaviour
 
     public void ProcessLogFile(string filepath)
     {
-
         locations.Clear();
         resultEntries.Clear();
         resultHeader.Clear();
+
         string content;
         string[] lines;
+
         try
         {
             StreamReader reader = new StreamReader(File.OpenRead(filepath));
@@ -85,7 +82,7 @@ public class LogAnalyzer : MonoBehaviour
         trials = 0;
         fix_checks = 0;
         fix_loss = 0;
-        Debug.Log(lines.Length);
+
         for(int i = 0; i < lines.Length; i++)
         {
             string line = lines[i];
@@ -209,16 +206,16 @@ public class LogAnalyzer : MonoBehaviour
             );
             resultEntries.Add(entry);
         }
-        Debug.Log("trials " + trials);
-        Debug.Log("FPs " + FPs);
+        //Debug.Log("trials " + trials);
+        //Debug.Log("FPs " + FPs);
         //Output the false negative data
         percent_FN = fnTotal > 0 ? (float)fnMissed / fnTotal : 0;
         percent_FP = trials > 0 ? (float)FPs / trials : 0;
         percent_FL = fix_checks > 0 ? (float)fix_loss / fix_checks : 0;
 
-        string info = "FN Percentage: " + percent_FN.ToString("0.000") + "\n";
-        info += "FP Percentage: " + percent_FP.ToString("0.000") + "\n";
-        info += "FL Percentage: " + percent_FL.ToString("0.000") + "\n";
+        string info = "FN: " + (percent_FN * 100f).ToString("00.00") + "%\n";
+        info += "FP: " + (percent_FP * 100f).ToString("00.00") + "%\n";
+        info += "FL: " + (percent_FL * 100f).ToString("00.00") + "%\n";
 
         resultHeader.Add("Total trials,Percent false pos,Percent fixation loss");
         resultHeader.Add($"{trials.ToString()},{percent_FP.ToString("0.000")},{percent_FL.ToString("0.000")}");

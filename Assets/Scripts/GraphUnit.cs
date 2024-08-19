@@ -10,6 +10,14 @@ public class GraphUnit : MonoBehaviour
     {
         unitMesh.material.SetColor("_Color", tint);
     }
+
+    public void SetMaterialOffset(Vector2 tiling, Vector2 offset, Texture2D text)
+    {
+        unitMesh.material.SetTexture("_Base", text);
+        unitMesh.material.SetTextureScale("_Base", tiling);
+        unitMesh.material.SetTextureOffset("_Base", offset);
+    }
+
     public void SetText(float weibul)
     {
         unitLabel.text = weibul.ToString();

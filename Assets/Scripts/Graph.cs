@@ -19,7 +19,7 @@ public class Graph : MonoBehaviour
     [SerializeField] private GameObject VerticalLabelPrefab;
     [SerializeField] private GameObject LabelsGo;
     [SerializeField] private GameObject UnitsGo;
-
+    [SerializeField] private Material heatmapMaterial;
     [Header("UI References")]
     [SerializeField] private Button SaveResultButton;
     [SerializeField] private TMP_Text pathText;
@@ -37,16 +37,20 @@ public class Graph : MonoBehaviour
     private Vector3 graphMaxHor = new Vector3(20, 0, 0);
     private Vector3 graphMaxVert = new Vector3(0, 20, 0);
 
-    private int defaultAxisLength = 9;
+    private int defaultAxisHalfLength = 9;
     private int defaultStepValue = 2;
-    private int axisLength;
+    private int axisHalfLength;
     private int stepValue;
+    private int unitCountPerAxis;
 
     private string currentDirectory;
     private string heatmapDirectory;
     private string resultsDirectory;
     private string currentFileName;
     private LogAnalyzer logAnalyzer;
+    private Texture2D heightMap;
+    private int textureScale = 3;
+
     private void Awake()
     {
         logAnalyzer = GetComponent<LogAnalyzer>();
@@ -65,14 +69,18 @@ public class Graph : MonoBehaviour
         if (!Directory.Exists(resultsDirectory))
             Directory.CreateDirectory(resultsDirectory);
 
-        CreateGraphAxis(defaultAxisLength, defaultStepValue);
+        CreateGraphAxis(defaultAxisHalfLength, defaultStepValue);
         EnableSaveResultButton(false);
+
         VersionText.text = Application.version;
+
     }
-    public void CreateGraphAxis(int _axisLength, int _stepValue)
+    public void CreateGraphAxis(int _axisHalfLength, int _stepValue)
     {
-        axisLength = _axisLength;
+        axisHalfLength = _axisHalfLength;
         stepValue = _stepValue;
+        unitCountPerAxis = (axisHalfLength * 2 / _stepValue) + 1; // 10 ideally
+        unitCountPerAxis *= textureScale; // scale to make it less pixelated
 
         Vector3[] graphPositions = new Vector3[3] { graphMaxVert, graphOrigin, graphMaxHor };
         lineRenderer.positionCount = 3;
@@ -81,12 +89,12 @@ public class Graph : MonoBehaviour
         float graphSpacingX = 2;
         float graphSpacingY = 2;
 
-        int col = -axisLength;
+        int col = -axisHalfLength;
         int iterator = 0;
 
         foreach(Transform child in LabelsGo.transform)
         {
-            if (child.name != $"{axisLength}-{stepValue}")
+            if (child.name != $"{axisHalfLength}-{stepValue}")
                 child.gameObject.SetActive(false);
         }
 
@@ -94,7 +102,7 @@ public class Graph : MonoBehaviour
         GameObject labelGroup;
         try
         {
-            labelGroup = LabelsGo.transform.Find($"{axisLength}-{stepValue}").gameObject;
+            labelGroup = LabelsGo.transform.Find($"{axisHalfLength}-{stepValue}").gameObject;
             labelGroup.SetActive(true);
             exist = true;
         }
@@ -106,10 +114,10 @@ public class Graph : MonoBehaviour
 
         if (!exist)
         {
-            labelGroup = new GameObject($"{axisLength}-{stepValue}");
+            labelGroup = new GameObject($"{axisHalfLength}-{stepValue}");
             labelGroup.transform.SetParent(LabelsGo.transform);
             // create labels
-            while (col <= axisLength)
+            while (col <= axisHalfLength)
             {
                 GameObject labelGO = Instantiate(HorizontalLabelPrefab, labelGroup.transform);
                 TextMesh labelText = labelGO.GetComponent<TextMesh>();
@@ -119,10 +127,10 @@ public class Graph : MonoBehaviour
                 col += stepValue;
             }
 
-            int row = -axisLength;
+            int row = -axisHalfLength;
             iterator = 0;
 
-            while (row <= axisLength)
+            while (row <= axisHalfLength)
             {
                 GameObject labelGO = Instantiate(VerticalLabelPrefab, labelGroup.transform);
                 TextMesh labelText = labelGO.GetComponent<TextMesh>();
@@ -175,57 +183,59 @@ public class Graph : MonoBehaviour
     }
     public void CreateHeatmapFromList(List<ResultEntry> entries)
     {
-        foreach(Transform child in UnitsGo.transform)
+        foreach (Transform child in UnitsGo.transform)
         {
             child.gameObject.SetActive(false);
         }
 
-        foreach(ResultEntry entry in entries)
+        // create a heightmap
+        heightMap = new Texture2D(unitCountPerAxis, unitCountPerAxis);
+        heightMap.wrapMode = TextureWrapMode.Clamp;
+        for (int row = 0; row < unitCountPerAxis; row++)
         {
+            for (int col = 0; col < unitCountPerAxis; col++)
+            {
+                //row 0 to 9
+                //col 0 to 9
+
+                //float unitToLocationX = (col * stepValue) - axisHalfLength;
+                heightMap.SetPixel(col, row, colorSet[0]);
+            }
+        }
+
+        foreach (ResultEntry entry in entries)
+        {
+            float percentage = entry.weibull / 50f;
+
+            float colorStep = 1f / (colorSet.Length - 1); // 0.125f
+            int groupEnd = Mathf.RoundToInt(percentage / colorStep);
+            int groupStart = groupEnd - 1;
+            Color minColor = colorSet[groupStart];
+            Color maxColor = colorSet[groupEnd];
+            float lerpStep = (percentage - (colorStep * groupEnd)) / colorStep;
+            Color unitColor = Color.Lerp(minColor, maxColor, lerpStep);
+
+
+            for (int offsetX = 0; offsetX < textureScale; offsetX++)
+            {
+                for (int offsetY = 0; offsetY < textureScale; offsetY++)
+                {
+                    int xOffset = offsetX;
+                    int yOffset = offsetY;
+                    int pixelX = ((entry.locationX + axisHalfLength) / stepValue * textureScale) + xOffset;
+                    int pixelY = ((entry.locationY + axisHalfLength) / stepValue * textureScale) + yOffset;
+                    heightMap.SetPixel(pixelX, pixelY, unitColor);
+                }
+            }
+
+
             CreateOneUnit(entry.group,
                 entry.locationX / (stepValue / 2),
                 entry.locationY / (stepValue / 2),
                 Mathf.Round(entry.weibull)
             );
         }
-    }
-    private void CreateHeatmap(string resultContent)
-    {
-        
-        string[] lines = resultContent.Split("\n");
-
-        if (lines.Length > 6)
-        {
-            for (int l = 5; l < lines.Length; l++)
-            {
-                string currentLine = lines[l];
-                string[] values = currentLine.Split(',');
-
-                if (values.Length == 7)
-                {
-                    int group = int.Parse(values[0]);
-                    float locationX = float.Parse(values[1]);
-                    float locationY = float.Parse(values[2]);
-                    int reversals = int.Parse(values[3]);
-                    float averageReversalContrast = float.Parse(values[4]);
-                    float averageReversal = float.Parse(values[5]);
-                    float weibull = float.Parse(values[6]);
-
-                }
-                else if(values.Length == 8)
-                {
-                    int group = int.Parse(values[0]);
-                    float locationX = float.Parse(values[1]);
-                    float locationY = float.Parse(values[2]);
-                    int reversals = int.Parse(values[3]);
-                    float averageReversalLogContrast = float.Parse(values[4]);
-                    float averageReversalContrast = float.Parse(values[5]);
-                    float averageReversal = float.Parse(values[6]);
-                    float weibull = float.Parse(values[7]);
-                }
-
-            }
-        }
+        heightMap.Apply();
     }
     private void CreateOneUnit(int group, float locationX, float locationY, float weibull)
     {
@@ -243,8 +253,8 @@ public class Graph : MonoBehaviour
         }
 
         GraphUnit unit = unitGO.GetComponent<GraphUnit>();
-        unitGO.transform.position = new Vector3(locationX, locationY, 0f) + new Vector3(9f, 9f, 0f);
-        float percentage = weibull / 50f;
+        unitGO.transform.position = new Vector3(locationX, locationY, 0f) + new Vector3(axisHalfLength, axisHalfLength, 0f);
+
 
         // 0 - 1  0.0 to 0.125
         // 1 - 2  0.125 to 0.25
@@ -255,22 +265,28 @@ public class Graph : MonoBehaviour
         // 6 - 7  0.75 to 0.875
         // 7 - 8  0.875 to 1.0
 
-        Debug.Log(percentage);
 
-        float stepValue = 1f / (colorSet.Length - 1); // 0.125f
+        //float stepValue = 1f / (colorSet.Length - 1); // 0.125f
 
-        int groupEnd = Mathf.RoundToInt(percentage / stepValue);
-        int groupStart = groupEnd - 1;
+        //int groupEnd = Mathf.RoundToInt(percentage / stepValue);
+        //int groupStart = groupEnd - 1;
 
-        Color minColor = colorSet[groupStart];
-        Color maxColor = colorSet[groupEnd];
+        //Color minColor = colorSet[groupStart];
+        //Color maxColor = colorSet[groupEnd];
 
-        float lerpStep = (percentage - (stepValue * groupEnd))/ stepValue;
+        //float lerpStep = (percentage - (stepValue * groupEnd))/ stepValue;
 
-        Color unitColor = Color.Lerp(minColor, maxColor, lerpStep);
+        //Color unitColor = Color.Lerp(minColor, maxColor, lerpStep);
 
+        float tileSize = 1f / (unitCountPerAxis / textureScale);
+
+        Vector2 tiling = new Vector2(0.1f, 0.1f);
+        Vector2 offset = new Vector2(
+            -tileSize * (axisHalfLength - locationX) / stepValue + (1f - tileSize),
+            -tileSize * (axisHalfLength - locationY) / stepValue + (1f - tileSize));
+        
         unit.SetText(weibull);
-        unit.SetColor(unitColor);
+        unit.SetMaterialOffset(tiling, offset, heightMap);
     }
 
     public void SaveResult()
