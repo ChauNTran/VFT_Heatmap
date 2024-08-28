@@ -21,6 +21,7 @@ public class Graph : MonoBehaviour
     [SerializeField] private GameObject UnitsGo;
     [SerializeField] private Material heatmapMaterial;
     [Header("UI References")]
+    [SerializeField] private Button SaveScreenshotButton;
     [SerializeField] private Button SaveResultButton;
     [SerializeField] private TMP_Text pathText;
     [SerializeField] private TMP_Text infoText;
@@ -81,7 +82,8 @@ public class Graph : MonoBehaviour
         stepValue = _stepValue;
         unitCountPerAxis = (axisHalfLength * 2 / _stepValue) + 1; // 10 ideally
         unitCountPerAxis *= textureScale; // scale to make it less pixelated
-
+        Debug.Log(stepValue);
+        Debug.Log(axisHalfLength);
         Vector3[] graphPositions = new Vector3[3] { graphMaxVert, graphOrigin, graphMaxHor };
         lineRenderer.positionCount = 3;
         lineRenderer.SetPositions(graphPositions);
@@ -205,7 +207,7 @@ public class Graph : MonoBehaviour
 
         foreach (ResultEntry entry in entries)
         {
-            float percentage = entry.weibull / 50f;
+            float percentage = entry.weibull / 40f;
 
             float colorStep = 1f / (colorSet.Length - 1); // 0.125f
             int groupEnd = Mathf.RoundToInt(percentage / colorStep);
@@ -230,8 +232,8 @@ public class Graph : MonoBehaviour
 
 
             CreateOneUnit(entry.group,
-                entry.locationX / (stepValue / 2),
-                entry.locationY / (stepValue / 2),
+                entry.locationX,
+                entry.locationY,
                 Mathf.Round(entry.weibull)
             );
         }
@@ -239,11 +241,15 @@ public class Graph : MonoBehaviour
     }
     private void CreateOneUnit(int group, float locationX, float locationY, float weibull)
     {
-        string name = $"{locationX}-{locationY}";
+        float unitPosX = locationX / (stepValue / 2);
+        float unitPosY = locationY / (stepValue / 2);
+
+        string name = $"{unitPosX}-{unitPosY}";
         GameObject unitGO;
         try
         {
             unitGO = UnitsGo.transform.Find(name).gameObject;
+            Debug.Log($"{unitPosX}-{unitPosY}");
             unitGO.SetActive(true);
         }
         catch(Exception e)
@@ -253,7 +259,7 @@ public class Graph : MonoBehaviour
         }
 
         GraphUnit unit = unitGO.GetComponent<GraphUnit>();
-        unitGO.transform.position = new Vector3(locationX, locationY, 0f) + new Vector3(axisHalfLength, axisHalfLength, 0f);
+        unitGO.transform.position = new Vector3(unitPosX, unitPosY, 0f) + new Vector3((axisHalfLength * 2 / stepValue), (axisHalfLength * 2 / stepValue), 0f);
 
 
         // 0 - 1  0.0 to 0.125
@@ -266,21 +272,9 @@ public class Graph : MonoBehaviour
         // 7 - 8  0.875 to 1.0
 
 
-        //float stepValue = 1f / (colorSet.Length - 1); // 0.125f
-
-        //int groupEnd = Mathf.RoundToInt(percentage / stepValue);
-        //int groupStart = groupEnd - 1;
-
-        //Color minColor = colorSet[groupStart];
-        //Color maxColor = colorSet[groupEnd];
-
-        //float lerpStep = (percentage - (stepValue * groupEnd))/ stepValue;
-
-        //Color unitColor = Color.Lerp(minColor, maxColor, lerpStep);
-
         float tileSize = 1f / (unitCountPerAxis / textureScale);
 
-        Vector2 tiling = new Vector2(0.1f, 0.1f);
+        Vector2 tiling = new Vector2(tileSize, tileSize);
         Vector2 offset = new Vector2(
             -tileSize * (axisHalfLength - locationX) / stepValue + (1f - tileSize),
             -tileSize * (axisHalfLength - locationY) / stepValue + (1f - tileSize));
@@ -310,6 +304,10 @@ public class Graph : MonoBehaviour
     public void EnableSaveResultButton(bool en)
     {
         SaveResultButton.interactable = en;
+    }
+    public void EnableScreenshotButton()
+    {
+        SaveScreenshotButton.interactable = true;
     }
     public void SaveGraph ()
     {

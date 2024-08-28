@@ -226,7 +226,9 @@ public class LogAnalyzer : MonoBehaviour
         _graph.CreateHeatmapFromList(resultEntries);
         _graph.OutputInfo(info);
         _graph.EnableSaveResultButton(true);
-        
+        _graph.EnableScreenshotButton();
+
+
     }
 
     public void ProcressResultFile(string filepath)
@@ -255,14 +257,16 @@ public class LogAnalyzer : MonoBehaviour
                     percent_FL = float.Parse(values[2]);
                     continue;
                 }
-                else if(l == 3)
+                else if(l == 4)
                 {
+                    // False neg candidates:, 24, False Neg percent:, NaN
+                    if (values.Length == 4)
                     percent_FN = float.Parse(values[3]);
                     continue;
                 }
-                else if (l == 0 || l == 1 || l == 4)
+                else if (l == 0 || l == 1 || l == 3)
                     continue;
-
+                // data start either from 4 or 5
 
                 if (values.Length == 7)
                 {
@@ -333,6 +337,8 @@ public class LogAnalyzer : MonoBehaviour
             _graph.CreateHeatmapFromList(resultEntries);
             _graph.OutputInfo(info);
             _graph.EnableSaveResultButton(false);
+            _graph.EnableScreenshotButton();
+
         }
         
     }
