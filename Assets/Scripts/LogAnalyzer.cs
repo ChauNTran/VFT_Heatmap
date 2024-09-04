@@ -68,7 +68,6 @@ public class LogAnalyzer : MonoBehaviour
             StreamReader reader = new StreamReader(File.OpenRead(filepath));
             content = reader.ReadToEnd();
             lines = content.Split("\n");
-            Debug.Log(content);
         }
         catch (Exception e)
         {

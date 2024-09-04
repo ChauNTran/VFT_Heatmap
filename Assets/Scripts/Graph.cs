@@ -7,7 +7,19 @@ using TMPro;
 using SFB;
 using System.IO;
 
-
+[Serializable]
+public class LowResPixel
+{
+    public Tuple<int, int> cord;
+    public bool filled;
+    public Color pixelColor;
+    public LowResPixel(Tuple<int, int> _cord, bool _filled, Color _pixelColor)
+    {
+        cord = _cord;
+        filled = _filled;
+        pixelColor = _pixelColor;
+    }
+}
 
 
 public class Graph : MonoBehaviour
@@ -28,8 +40,9 @@ public class Graph : MonoBehaviour
     [SerializeField] private CanvasGroup canvas;
     [SerializeField] private TMP_Text FeedbackText;
     [SerializeField] private TMP_Text VersionText;
-
-    [Header ("Graph Creation Settings")]
+    [SerializeField] private RawImage fullTexture;
+    [SerializeField] private RawImage fullTexture2;
+    [Header("Graph Creation Settings")]
     //[SerializeField] private Color minColor;
     //[SerializeField] private Color maxColor;
     [SerializeField] private Color[] colorSet;
@@ -50,8 +63,8 @@ public class Graph : MonoBehaviour
     private string currentFileName;
     private LogAnalyzer logAnalyzer;
     private Texture2D heightMap;
-    private int textureScale = 3;
-
+    private int textureScale = 10;
+    public List<LowResPixel> lowresPixels;
     private void Awake()
     {
         logAnalyzer = GetComponent<LogAnalyzer>();
@@ -80,10 +93,7 @@ public class Graph : MonoBehaviour
     {
         axisHalfLength = _axisHalfLength;
         stepValue = _stepValue;
-        unitCountPerAxis = (axisHalfLength * 2 / _stepValue) + 1; // 10 ideally
-        unitCountPerAxis *= textureScale; // scale to make it less pixelated
-        Debug.Log(stepValue);
-        Debug.Log(axisHalfLength);
+        unitCountPerAxis = (axisHalfLength * 2 / _stepValue) + 3; // 10 ideally
         Vector3[] graphPositions = new Vector3[3] { graphMaxVert, graphOrigin, graphMaxHor };
         lineRenderer.positionCount = 3;
         lineRenderer.SetPositions(graphPositions);
@@ -94,7 +104,7 @@ public class Graph : MonoBehaviour
         int col = -axisHalfLength;
         int iterator = 0;
 
-        foreach(Transform child in LabelsGo.transform)
+        foreach (Transform child in LabelsGo.transform)
         {
             if (child.name != $"{axisHalfLength}-{stepValue}")
                 child.gameObject.SetActive(false);
@@ -108,7 +118,7 @@ public class Graph : MonoBehaviour
             labelGroup.SetActive(true);
             exist = true;
         }
-        catch(Exception e)
+        catch (Exception e)
         {
             exist = false;
         }
@@ -124,7 +134,7 @@ public class Graph : MonoBehaviour
                 GameObject labelGO = Instantiate(HorizontalLabelPrefab, labelGroup.transform);
                 TextMesh labelText = labelGO.GetComponent<TextMesh>();
                 labelText.text = col.ToString();
-                labelGO.transform.position = graphOrigin + new Vector3(graphSpacingX * iterator, 0, 0) + new Vector3(1,-0.5f,0);
+                labelGO.transform.position = graphOrigin + new Vector3(graphSpacingX * iterator, 0, 0) + new Vector3(1, -0.5f, 0);
                 iterator += 1;
                 col += stepValue;
             }
@@ -174,7 +184,7 @@ public class Graph : MonoBehaviour
                 logAnalyzer.ProcressResultFile(path[0]);
             else
                 pathText.text = "File Not Valid";
-            
+
             HideFeedback();
         }
         yield return null;
@@ -183,6 +193,110 @@ public class Graph : MonoBehaviour
     {
         infoText.text = info;
     }
+
+    // t is a value that goes from 0 to 1 to interpolate in a C1 continuous way across uniformly sampled data points.
+    // when t is 0, this will return B.  When t is 1, this will return C.  Inbetween values will return an interpolation
+    // between B and C.  A and D are used to calculate slopes at the edges.
+    Color CubicHermite(Color A, Color B, Color C, Color D, float t)
+    {
+        Color a = (A / -2.0f) + (3.0f * B) / 2.0f - (3.0f * C) / 2.0f + D / 2.0f;
+        Color b = A - (5.0f * B) / 2.0f + 2.0f * C - D / 2.0f;
+        Color c = A / -2.0f + C / 2.0f;
+        Color d = B;
+
+        return a * t * t * t + b * t * t + c * t + d;
+    }
+
+    float CubicHermite(float A, float B, float C, float D, float t)
+    {
+        float a = (A / -2.0f) + (3.0f * B) / 2.0f - (3.0f * C) / 2.0f + D / 2.0f;
+        float b = A - (5.0f * B) / 2.0f + 2.0f * C - D / 2.0f;
+        float c = A / -2.0f + C / 2.0f;
+        float d = B;
+
+        return a * t * t * t + b * t * t + c * t + d;
+    }
+
+    Color GetPixelClamped(Texture2D image, int x, int y)
+    {
+        x = Mathf.Clamp(x, 0, image.width - 1);
+        y = Mathf.Clamp(y, 0, image.height - 1);
+        return image.GetPixel(x, y);
+    }
+
+    Color SampleBicubic(Texture2D image, float u, float v,
+        bool topEdge, bool bottomEdge, bool leftEdge, bool rightEdge,
+        bool topRight, bool topLeft, bool bottomRight, bool bottomLeft)
+    {
+        // calculate coordinates -> also need to offset by half a pixel to keep image from shifting down and left half a pixel
+        float x = (u * image.width) - 0.5f;
+        int xint = (int)(x); // 0  to 9
+        float xfract = x - Mathf.Floor(x); // 0 to 1.0
+        float y = (v * image.height) - 0.5f;
+        int yint = (int)(y); // 0  to 9
+        float yfract = y - Mathf.Floor(y); // 0 to 1.0
+
+        if((topEdge //|| (!topEdge && (topRight || topLeft))
+            )&& yfract > 0.5f)
+            yfract = 1f;
+
+        if ((bottomEdge //|| (!bottomEdge && (bottomRight || bottomLeft))
+            )&& yfract < 0.5f)
+            yfract = 0f;
+
+        if ((leftEdge //|| (!leftEdge && (topLeft || bottomLeft))
+            )&& xfract > 0.5f)
+            xfract = 1f;
+
+        if ((rightEdge //|| (!rightEdge && (topRight || bottomRight))
+            )&& xfract < 0.5f)
+            xfract = 0f;
+
+        // 1st row
+        Color p00 = GetPixelClamped(image, xint - 1, yint - 1);
+        Color p10 = GetPixelClamped(image, xint + 0, yint - 1);
+        Color p20 = GetPixelClamped(image, xint + 1, yint - 1);
+        Color p30 = GetPixelClamped(image, xint + 2, yint - 1);
+
+        //// 2nd row
+        Color p01 = GetPixelClamped(image, xint - 1, yint + 0);
+        Color p11 = GetPixelClamped(image, xint + 0, yint + 0);
+        Color p21 = GetPixelClamped(image, xint + 1, yint + 0);
+        Color p31 = GetPixelClamped(image, xint + 2, yint + 0);
+
+        //// 3rd row
+        Color p02 = GetPixelClamped(image, xint - 1, yint + 1);
+        Color p12 = GetPixelClamped(image, xint + 0, yint + 1);
+        Color p22 = GetPixelClamped(image, xint + 1, yint + 1);
+        Color p32 = GetPixelClamped(image, xint + 2, yint + 1);
+
+        //// 4th row
+        Color p03 = GetPixelClamped(image, xint - 1, yint + 2);
+        Color p13 = GetPixelClamped(image, xint + 0, yint + 2);
+        Color p23 = GetPixelClamped(image, xint + 1, yint + 2);
+        Color p33 = GetPixelClamped(image, xint + 2, yint + 2);
+
+        // interpolate bi-cubically!
+        // Clamp the values since the curve can put the value below 0 or above 255
+        Color col0 = CubicHermite(p00, p10, p20, p30, xfract);
+        Color col1 = CubicHermite(p01, p11, p21, p31, xfract);
+        Color col2 = CubicHermite(p02, p12, p22, p32, xfract);
+        Color col3 = CubicHermite(p03, p13, p23, p33, xfract);
+        Color ret = CubicHermite(col0, col1, col2, col3, yfract);
+
+        return ret;
+    }
+
+    Color SampleNearest(Texture2D image, float u, float v)
+    {
+        float x = (u * image.width);
+        int xint = (int)(x); // 0  to 9
+        float y = (v * image.height);
+        int yint = (int)(y); // 0  to 9
+        Color ret = GetPixelClamped(image, xint, yint );
+        return ret;
+    }
+
     public void CreateHeatmapFromList(List<ResultEntry> entries)
     {
         foreach (Transform child in UnitsGo.transform)
@@ -191,20 +305,28 @@ public class Graph : MonoBehaviour
         }
 
         // create a heightmap
-        heightMap = new Texture2D(unitCountPerAxis, unitCountPerAxis);
-        heightMap.wrapMode = TextureWrapMode.Clamp;
+        Texture2D lowResMap = new Texture2D(unitCountPerAxis, unitCountPerAxis);
+        lowResMap.wrapMode = TextureWrapMode.Repeat;
+        lowResMap.filterMode = FilterMode.Point;
+
+        int newWidth = (int)((float)lowResMap.width * textureScale);
+        int newHeight = (int)((float)lowResMap.height * textureScale);
+        heightMap = new Texture2D(newWidth, newHeight); // final texture
+        heightMap.wrapMode = TextureWrapMode.Repeat;
+
+
+        //initialize transparent
+        lowresPixels = new();
         for (int row = 0; row < unitCountPerAxis; row++)
         {
             for (int col = 0; col < unitCountPerAxis; col++)
             {
-                //row 0 to 9
-                //col 0 to 9
-
-                //float unitToLocationX = (col * stepValue) - axisHalfLength;
-                heightMap.SetPixel(col, row, colorSet[0]);
+                lowResMap.SetPixel(col, row, colorSet[0]);
+                lowresPixels.Add(new LowResPixel(new Tuple<int, int>(col, row), false, colorSet[0])); ;
             }
         }
 
+        //create low-res map
         foreach (ResultEntry entry in entries)
         {
             float percentage = entry.weibull / 40f;
@@ -217,19 +339,13 @@ public class Graph : MonoBehaviour
             float lerpStep = (percentage - (colorStep * groupEnd)) / colorStep;
             Color unitColor = Color.Lerp(minColor, maxColor, lerpStep);
 
+            int pixelX = ((entry.locationX + axisHalfLength) / stepValue);
+            int pixelY = ((entry.locationY + axisHalfLength) / stepValue);
 
-            for (int offsetX = 0; offsetX < textureScale; offsetX++)
-            {
-                for (int offsetY = 0; offsetY < textureScale; offsetY++)
-                {
-                    int xOffset = offsetX;
-                    int yOffset = offsetY;
-                    int pixelX = ((entry.locationX + axisHalfLength) / stepValue * textureScale) + xOffset;
-                    int pixelY = ((entry.locationY + axisHalfLength) / stepValue * textureScale) + yOffset;
-                    heightMap.SetPixel(pixelX, pixelY, unitColor);
-                }
-            }
-
+            lowResMap.SetPixel(pixelX + 1, pixelY + 1, unitColor);
+            LowResPixel filledPixel = lowresPixels.Find(x => x.cord.Equals(new Tuple<int, int>(pixelX + 1, pixelY + 1) ) );
+            filledPixel.filled = true;
+            filledPixel.pixelColor = unitColor;
 
             CreateOneUnit(entry.group,
                 entry.locationX,
@@ -237,22 +353,88 @@ public class Graph : MonoBehaviour
                 Mathf.Round(entry.weibull)
             );
         }
+        lowResMap.Apply();
+
+        Debug.Log(heightMap.height + " - " + heightMap.width); // 1000 - 1000
+
+        //for (int y = 0; y < heightMap.height; y++)
+        //{
+        //    float v = (float)y / (float)(heightMap.height - 1);// 0 to 1.0;
+        //    for (int x = 0; x < heightMap.width; x++)
+        //    {
+        //        float u = (float)x / (float)(heightMap.width - 1); // 0 to 1.0
+        //        heightMap.SetPixel(x, y, SampleBicubic(lowResMap, u, v));
+        //    }
+        //}
+
+        float heightMap_y = (float)(heightMap.height - 1);
+        float heightMap_x = (float)(heightMap.width - 1);
+
+        for (int y = 0; y < lowResMap.height; y++)
+        {
+            for (int x = 0; x < lowResMap.width; x++)
+            {
+                LowResPixel pixel = lowresPixels.Find(p => p.cord.Equals(new Tuple<int, int>(x,y)));
+
+                if(!pixel.filled)
+                {
+                    for(int p_y = (y * textureScale); p_y < (y * textureScale) + textureScale; p_y++)
+                    {
+                        float v = (float)p_y / heightMap_y;// 0 to 1.0;
+                        for (int p_x = (x * textureScale); p_x < (x * textureScale) + textureScale; p_x++)
+                        {
+                            float u = (float)p_x / heightMap_x;
+                            heightMap.SetPixel(p_x, p_y, SampleNearest(lowResMap, u, v));
+                        }
+                    }
+                }
+                else
+                {
+                    // if pixel is boundary or adjacent top piece is not filled
+                    bool topEdge = (y > 0 && !lowresPixels.Find(p => p.cord.Equals(new Tuple<int, int>(x, y - 1))).filled);
+                    bool topRight = (y > 0 && !lowresPixels.Find(p => p.cord.Equals(new Tuple<int, int>(x + 1, y - 1))).filled);
+                    bool topLeft = (y > 0 && !lowresPixels.Find(p => p.cord.Equals(new Tuple<int, int>(x - 1, y - 1))).filled);
+
+                    bool bottomEdge = (y < lowResMap.height - 1 && !lowresPixels.Find(p => p.cord.Equals(new Tuple<int, int>(x, y + 1))).filled);
+                    bool bottomRight = (y > 0 && !lowresPixels.Find(p => p.cord.Equals(new Tuple<int, int>(x + 1, y + 1))).filled);
+                    bool bottomLeft = (y > 0 && !lowresPixels.Find(p => p.cord.Equals(new Tuple<int, int>(x - 1, y + 1))).filled);
+
+                    bool leftEdge = (x > 0 && !lowresPixels.Find(p => p.cord.Equals(new Tuple<int, int>(x - 1, y))).filled);
+                    bool rightEdge = (x < lowResMap.height - 1 && !lowresPixels.Find(p => p.cord.Equals(new Tuple<int, int>(x + 1, y))).filled);
+
+                    for (int p_y = (y * textureScale); p_y < (y * textureScale) + textureScale; p_y++)
+                    {
+                        float v = (float)p_y / heightMap_y;// 0 to 1.0;
+                        for (int p_x = (x * textureScale); p_x < (x * textureScale) + textureScale; p_x++)
+                        {
+                            float u = (float)p_x / heightMap_x;
+                            heightMap.SetPixel(p_x, p_y, SampleBicubic(lowResMap, u, v,
+                                topEdge, bottomEdge, leftEdge, rightEdge,
+                                topRight, topLeft, bottomRight, bottomLeft));
+                        }
+                    }
+                }
+            }
+        }
+
         heightMap.Apply();
+
+        fullTexture.texture = lowResMap;
+        fullTexture2.texture = heightMap;
     }
     private void CreateOneUnit(int group, float locationX, float locationY, float weibull)
     {
         float unitPosX = locationX / (stepValue / 2);
         float unitPosY = locationY / (stepValue / 2);
 
-        string name = $"{unitPosX}-{unitPosY}";
+        string name = $"{unitPosX},{unitPosY}";
         GameObject unitGO;
         try
         {
             unitGO = UnitsGo.transform.Find(name).gameObject;
-            Debug.Log($"{unitPosX}-{unitPosY}");
             unitGO.SetActive(true);
         }
-        catch(Exception e)
+        catch (Exception e)
         {
             unitGO = Instantiate(GraphUnitPrefab, UnitsGo.transform);
             unitGO.name = name;
@@ -272,13 +454,13 @@ public class Graph : MonoBehaviour
         // 7 - 8  0.875 to 1.0
 
 
-        float tileSize = 1f / (unitCountPerAxis / textureScale);
+        float tileSize = 1f / (unitCountPerAxis);
 
         Vector2 tiling = new Vector2(tileSize, tileSize);
         Vector2 offset = new Vector2(
-            -tileSize * (axisHalfLength - locationX) / stepValue + (1f - tileSize),
-            -tileSize * (axisHalfLength - locationY) / stepValue + (1f - tileSize));
-        
+            -tileSize * (axisHalfLength - locationX + 2f) / stepValue + (1f - tileSize),
+            -tileSize * (axisHalfLength - locationY + 2f) / stepValue + (1f - tileSize));
+
         unit.SetText(weibull);
         unit.SetMaterialOffset(tiling, offset, heightMap);
     }
@@ -289,13 +471,13 @@ public class Graph : MonoBehaviour
         ExtensionFilter[] extensions = new ExtensionFilter[] { extension_csv };
         string resultFileName = currentFileName.Replace("_Log", "_Results");
         string resultPath = StandaloneFileBrowser.SaveFilePanel("Save Result File", resultsDirectory, resultFileName, extensions);
-        if(!string.IsNullOrEmpty(resultPath))
+        if (!string.IsNullOrEmpty(resultPath))
         {
             StreamWriter writer = new StreamWriter(resultPath);
             foreach (string header in logAnalyzer.resultHeader)
                 writer.WriteLine(header);
             foreach (ResultEntry entry in logAnalyzer.resultEntries)
-                writer.WriteLine( entry.StringifyEntry());
+                writer.WriteLine(entry.StringifyEntry());
             writer.Close();
             ShowFeedback("Saved Result", true);
         }
@@ -309,7 +491,7 @@ public class Graph : MonoBehaviour
     {
         SaveScreenshotButton.interactable = true;
     }
-    public void SaveGraph ()
+    public void SaveGraph()
     {
 
         ExtensionFilter extension_png = new ExtensionFilter("png", "png");
@@ -340,13 +522,12 @@ public class Graph : MonoBehaviour
 
     public void ShowFeedback(string content, bool autoHide = false)
     {
-        Debug.Log("show feedback");
         FeedbackText.enabled = true;
         FeedbackText.text = content;
         if (autoHide)
             StartCoroutine(AutoHideFeedback());
     }
-    public void HideFeedback ()
+    public void HideFeedback()
     {
         FeedbackText.enabled = false;
     }

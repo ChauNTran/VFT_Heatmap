@@ -35,9 +35,6 @@
         },
         {
             "m_Id": "824569816f9f4925942b454de57c73df"
-        },
-        {
-            "m_Id": "d0618313cb654b2abedb9faacff06bf5"
         }
     ],
     "m_GroupDatas": [],
@@ -69,20 +66,6 @@
                     "m_Id": "264adfab51814270b4e6c85e1ff01e62"
                 },
                 "m_SlotId": 0
-            }
-        },
-        {
-            "m_OutputSlot": {
-                "m_Node": {
-                    "m_Id": "d0618313cb654b2abedb9faacff06bf5"
-                },
-                "m_SlotId": 0
-            },
-            "m_InputSlot": {
-                "m_Node": {
-                    "m_Id": "824569816f9f4925942b454de57c73df"
-                },
-                "m_SlotId": 4
             }
         }
     ],
@@ -579,21 +562,6 @@
 
 {
     "m_SGVersion": 0,
-    "m_Type": "UnityEditor.ShaderGraph.Vector1MaterialSlot",
-    "m_ObjectId": "bae103b6b6d843e995586487176369f8",
-    "m_Id": 0,
-    "m_DisplayName": "LOD",
-    "m_SlotType": 1,
-    "m_Hidden": false,
-    "m_ShaderOutputName": "Out",
-    "m_StageCapability": 3,
-    "m_Value": 0.0,
-    "m_DefaultValue": 0.0,
-    "m_Labels": []
-}
-
-{
-    "m_SGVersion": 0,
     "m_Type": "UnityEditor.ShaderGraph.CategoryData",
     "m_ObjectId": "bba3c3c94d564b8a8eb7ae1bbd8eca55",
     "m_Name": "",
@@ -633,42 +601,6 @@
     "m_ShaderOutputName": "Sampler",
     "m_StageCapability": 3,
     "m_BareResource": false
-}
-
-{
-    "m_SGVersion": 0,
-    "m_Type": "UnityEditor.ShaderGraph.PropertyNode",
-    "m_ObjectId": "d0618313cb654b2abedb9faacff06bf5",
-    "m_Group": {
-        "m_Id": ""
-    },
-    "m_Name": "Property",
-    "m_DrawState": {
-        "m_Expanded": true,
-        "m_Position": {
-            "serializedVersion": "2",
-            "x": -449.0835876464844,
-            "y": 287.3345947265625,
-            "width": 0.0,
-            "height": 0.0
-        }
-    },
-    "m_Slots": [
-        {
-            "m_Id": "bae103b6b6d843e995586487176369f8"
-        }
-    ],
-    "synonyms": [],
-    "m_Precision": 0,
-    "m_PreviewExpanded": true,
-    "m_DismissedVersion": 0,
-    "m_PreviewMode": 0,
-    "m_CustomColors": {
-        "m_SerializableColors": []
-    },
-    "m_Property": {
-        "m_Id": "271fd48f973b4b00af96cc2745dd5fbf"
-    }
 }
 
 {
