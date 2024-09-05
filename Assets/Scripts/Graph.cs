@@ -26,6 +26,8 @@ public class Graph : MonoBehaviour
 {
     [Header("References")]
     [SerializeField] private LineRenderer lineRenderer;
+    [SerializeField] private LineRenderer verticalAxis;
+    [SerializeField] private LineRenderer horizontalAixs;
     [SerializeField] private GameObject GraphUnitPrefab;
     [SerializeField] private GameObject HorizontalLabelPrefab;
     [SerializeField] private GameObject VerticalLabelPrefab;
@@ -40,11 +42,7 @@ public class Graph : MonoBehaviour
     [SerializeField] private CanvasGroup canvas;
     [SerializeField] private TMP_Text FeedbackText;
     [SerializeField] private TMP_Text VersionText;
-    [SerializeField] private RawImage fullTexture;
-    [SerializeField] private RawImage fullTexture2;
     [Header("Graph Creation Settings")]
-    //[SerializeField] private Color minColor;
-    //[SerializeField] private Color maxColor;
     [SerializeField] private Color[] colorSet;
 
     private Vector3 graphOrigin = new Vector3(0, 0, 0);
@@ -97,6 +95,10 @@ public class Graph : MonoBehaviour
         Vector3[] graphPositions = new Vector3[3] { graphMaxVert, graphOrigin, graphMaxHor };
         lineRenderer.positionCount = 3;
         lineRenderer.SetPositions(graphPositions);
+
+        horizontalAixs.positionCount = 2;
+        verticalAxis.positionCount = 2;
+
 
         float graphSpacingX = 2;
         float graphSpacingY = 2;
@@ -153,6 +155,15 @@ public class Graph : MonoBehaviour
             }
         }
 
+        verticalAxis.SetPositions(new Vector3[2] {
+            new Vector3((axisHalfLength * 2 / stepValue) + 1, 0 ,0),
+            new Vector3((axisHalfLength * 2 / stepValue) + 1, 20 ,0) });
+
+        horizontalAixs.SetPositions(new Vector3[2] {
+            new Vector3(0, (axisHalfLength * 2 / stepValue) + 1 ,0),
+            new Vector3(20, (axisHalfLength * 2 / stepValue) + 1 ,0) });
+
+        Debug.Log(axisHalfLength);
     }
     public void ImportFile()
     {
@@ -224,9 +235,7 @@ public class Graph : MonoBehaviour
         return image.GetPixel(x, y);
     }
 
-    Color SampleBicubic(Texture2D image, float u, float v,
-        bool topEdge, bool bottomEdge, bool leftEdge, bool rightEdge,
-        bool topRight, bool topLeft, bool bottomRight, bool bottomLeft)
+    Color SampleBicubic(Texture2D image, float u, float v)
     {
         // calculate coordinates -> also need to offset by half a pixel to keep image from shifting down and left half a pixel
         float x = (u * image.width) - 0.5f;
@@ -236,21 +245,6 @@ public class Graph : MonoBehaviour
         int yint = (int)(y); // 0  to 9
         float yfract = y - Mathf.Floor(y); // 0 to 1.0
 
-        if((topEdge //|| (!topEdge && (topRight || topLeft))
-            )&& yfract > 0.5f)
-            yfract = 1f;
-
-        if ((bottomEdge //|| (!bottomEdge && (bottomRight || bottomLeft))
-            )&& yfract < 0.5f)
-            yfract = 0f;
-
-        if ((leftEdge //|| (!leftEdge && (topLeft || bottomLeft))
-            )&& xfract > 0.5f)
-            xfract = 1f;
-
-        if ((rightEdge //|| (!rightEdge && (topRight || bottomRight))
-            )&& xfract < 0.5f)
-            xfract = 0f;
 
         // 1st row
         Color p00 = GetPixelClamped(image, xint - 1, yint - 1);
@@ -275,6 +269,7 @@ public class Graph : MonoBehaviour
         Color p13 = GetPixelClamped(image, xint + 0, yint + 2);
         Color p23 = GetPixelClamped(image, xint + 1, yint + 2);
         Color p33 = GetPixelClamped(image, xint + 2, yint + 2);
+
 
         // interpolate bi-cubically!
         // Clamp the values since the curve can put the value below 0 or above 255
@@ -355,8 +350,6 @@ public class Graph : MonoBehaviour
         }
         lowResMap.Apply();
 
-        Debug.Log(heightMap.height + " - " + heightMap.width); // 1000 - 1000
-
         //for (int y = 0; y < heightMap.height; y++)
         //{
         //    float v = (float)y / (float)(heightMap.height - 1);// 0 to 1.0;
@@ -367,10 +360,55 @@ public class Graph : MonoBehaviour
         //    }
         //}
 
+        for (int y = 0; y < lowResMap.height; y++)
+        {
+            for (int x = 0; x < lowResMap.width; x++)
+            {
+                LowResPixel pixel = lowresPixels.Find(p => p.cord.Equals(new Tuple<int, int>(x, y)));
+
+                if(pixel.filled)
+                {
+                    bool topEdge = (y > 0 && !lowresPixels.Find(p => p.cord.Equals(new Tuple<int, int>(x, y - 1))).filled);
+                    bool topRight = (y > 0 && !lowresPixels.Find(p => p.cord.Equals(new Tuple<int, int>(x + 1, y - 1))).filled);
+                    bool topLeft = (y > 0 && !lowresPixels.Find(p => p.cord.Equals(new Tuple<int, int>(x - 1, y - 1))).filled);
+
+                    bool bottomEdge = (y < lowResMap.height - 1 && !lowresPixels.Find(p => p.cord.Equals(new Tuple<int, int>(x, y + 1))).filled);
+                    bool bottomRight = (y > 0 && !lowresPixels.Find(p => p.cord.Equals(new Tuple<int, int>(x + 1, y + 1))).filled);
+                    bool bottomLeft = (y > 0 && !lowresPixels.Find(p => p.cord.Equals(new Tuple<int, int>(x - 1, y + 1))).filled);
+
+                    bool leftEdge = (x > 0 && !lowresPixels.Find(p => p.cord.Equals(new Tuple<int, int>(x - 1, y))).filled);
+                    bool rightEdge = (x < lowResMap.height - 1 && !lowresPixels.Find(p => p.cord.Equals(new Tuple<int, int>(x + 1, y))).filled);
+
+                    if (topEdge)
+                        lowResMap.SetPixel(x, y - 1, pixel.pixelColor);
+                    if (topRight)
+                        lowResMap.SetPixel(x + 1, y - 1, pixel.pixelColor);
+                    if (topLeft)
+                        lowResMap.SetPixel(x - 1, y - 1, pixel.pixelColor);
+
+                    if (bottomEdge)
+                        lowResMap.SetPixel(x, y + 1, pixel.pixelColor);
+                    if (bottomRight)
+                        lowResMap.SetPixel(x + 1, y + 1, pixel.pixelColor);
+                    if (bottomLeft)
+                        lowResMap.SetPixel(x - 1, y + 1, pixel.pixelColor);
+
+
+                    if (leftEdge)
+                        lowResMap.SetPixel(x - 1, y, pixel.pixelColor);
+                    if (rightEdge)
+                        lowResMap.SetPixel(x + 1, y, pixel.pixelColor);
+
+                }
+            }
+        }
+
+        lowResMap.Apply();
+
         float heightMap_y = (float)(heightMap.height - 1);
         float heightMap_x = (float)(heightMap.width - 1);
 
-        for (int y = 0; y < lowResMap.height; y++)
+        for (int y = 0; y < lowResMap.height; y++) // 12 x 12
         {
             for (int x = 0; x < lowResMap.width; x++)
             {
@@ -390,17 +428,6 @@ public class Graph : MonoBehaviour
                 }
                 else
                 {
-                    // if pixel is boundary or adjacent top piece is not filled
-                    bool topEdge = (y > 0 && !lowresPixels.Find(p => p.cord.Equals(new Tuple<int, int>(x, y - 1))).filled);
-                    bool topRight = (y > 0 && !lowresPixels.Find(p => p.cord.Equals(new Tuple<int, int>(x + 1, y - 1))).filled);
-                    bool topLeft = (y > 0 && !lowresPixels.Find(p => p.cord.Equals(new Tuple<int, int>(x - 1, y - 1))).filled);
-
-                    bool bottomEdge = (y < lowResMap.height - 1 && !lowresPixels.Find(p => p.cord.Equals(new Tuple<int, int>(x, y + 1))).filled);
-                    bool bottomRight = (y > 0 && !lowresPixels.Find(p => p.cord.Equals(new Tuple<int, int>(x + 1, y + 1))).filled);
-                    bool bottomLeft = (y > 0 && !lowresPixels.Find(p => p.cord.Equals(new Tuple<int, int>(x - 1, y + 1))).filled);
-
-                    bool leftEdge = (x > 0 && !lowresPixels.Find(p => p.cord.Equals(new Tuple<int, int>(x - 1, y))).filled);
-                    bool rightEdge = (x < lowResMap.height - 1 && !lowresPixels.Find(p => p.cord.Equals(new Tuple<int, int>(x + 1, y))).filled);
 
                     for (int p_y = (y * textureScale); p_y < (y * textureScale) + textureScale; p_y++)
                     {
@@ -408,9 +435,7 @@ public class Graph : MonoBehaviour
                         for (int p_x = (x * textureScale); p_x < (x * textureScale) + textureScale; p_x++)
                         {
                             float u = (float)p_x / heightMap_x;
-                            heightMap.SetPixel(p_x, p_y, SampleBicubic(lowResMap, u, v,
-                                topEdge, bottomEdge, leftEdge, rightEdge,
-                                topRight, topLeft, bottomRight, bottomLeft));
+                            heightMap.SetPixel(p_x, p_y, SampleBicubic(lowResMap, u, v));
                         }
                     }
                 }
@@ -418,9 +443,6 @@ public class Graph : MonoBehaviour
         }
 
         heightMap.Apply();
-
-        fullTexture.texture = lowResMap;
-        fullTexture2.texture = heightMap;
     }
     private void CreateOneUnit(int group, float locationX, float locationY, float weibull)
     {
@@ -458,8 +480,8 @@ public class Graph : MonoBehaviour
 
         Vector2 tiling = new Vector2(tileSize, tileSize);
         Vector2 offset = new Vector2(
-            -tileSize * (axisHalfLength - locationX + 2f) / stepValue + (1f - tileSize),
-            -tileSize * (axisHalfLength - locationY + 2f) / stepValue + (1f - tileSize));
+            -tileSize * (axisHalfLength - locationX + stepValue) / stepValue + (1f - tileSize),
+            -tileSize * (axisHalfLength - locationY + stepValue) / stepValue + (1f - tileSize));
 
         unit.SetText(weibull);
         unit.SetMaterialOffset(tiling, offset, heightMap);

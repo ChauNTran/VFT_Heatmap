@@ -212,9 +212,9 @@ public class LogAnalyzer : MonoBehaviour
         percent_FP = trials > 0 ? (float)FPs / trials : 0;
         percent_FL = fix_checks > 0 ? (float)fix_loss / fix_checks : 0;
 
-        string info = "FN: " + (percent_FN * 100f).ToString("00.00") + "%\n";
-        info += "FP: " + (percent_FP * 100f).ToString("00.00") + "%\n";
-        info += "FL: " + (percent_FL * 100f).ToString("00.00") + "%\n";
+        string info = "FN: " + Mathf.Round(percent_FN * 100f).ToString() + "%\n";
+        info += "FP: " + Mathf.Round(percent_FP * 100f).ToString() + "%\n";
+        info += "FL: " + Mathf.Round(percent_FL * 100f).ToString() + "%\n";
 
         resultHeader.Add("Total trials,Percent false pos,Percent fixation loss");
         resultHeader.Add($"{trials.ToString()},{percent_FP.ToString("0.000")},{percent_FL.ToString("0.000")}");
